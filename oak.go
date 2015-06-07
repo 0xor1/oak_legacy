@@ -197,7 +197,7 @@ type session struct{
 	entity Entity
 }
 
-func getSession(w http.ResponseWriter, r *http.Request) (session, error) {
+func getSession(w http.ResponseWriter, r *http.Request) (*session, error) {
 	s, err := sessionStore.Get(r, sessionName)
 
 	session := &session{
