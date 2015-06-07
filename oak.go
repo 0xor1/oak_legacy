@@ -26,7 +26,7 @@ const (
 )
 
 type EntityStore interface{
-	Create() (userId string, entityId string, entity Entity, err error)
+	Create() (entityId string, entity Entity, err error)
 	Read(entityId string) (entity Entity, err error)
 	Update(entityId string, entity Entity) (err error)
 }
@@ -34,6 +34,7 @@ type EntityStore interface{
 type Entity interface {
 	sus.Version
 	IsActive() bool
+	CreatedBy() (userId string)
 	RegisterNewUser() (userId string, err error)
 	Kick() (updated bool)
 	Act(action interface{}) error
@@ -69,12 +70,12 @@ func Route(router *mux.Router, sessStore sessions.Store, sessName string, e Enti
 func create(w http.ResponseWriter, r *http.Request){
 	s, _ := getSession(w, r)
 	if s.isNotEngaged() {
-		userId, entityId, entity, err := entityStore.Create()
+		entityId, entity, err := entityStore.Create()
 		if err != nil {
 			writeError(w, err)
 			return
 		}
-		s.set(userId, entityId, entity)
+		s.set(entity.CreatedBy(), entityId, entity)
 	}
 	writeJson(w, &json{_ID: s.getEntityId()})
 }
@@ -315,7 +316,7 @@ func fetchEntity(entityId string) (entity Entity, err error) {
 	entity, err = entityStore.Read(entityId)
 	if err == nil {
 		if entity.Kick() {
-			entityStore.Update(entityId, entity)
+			err = entityStore.Update(entityId, entity)
 		}
 	}
 	return
