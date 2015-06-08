@@ -22,7 +22,6 @@ const (
 
 	_ID			= `id`
 	_VERSION	= `v`
-	_NO_CHANGE	= `noChange`
 )
 
 type EntityStore interface{
@@ -123,7 +122,7 @@ func poll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if version == entity.GetVersion() {
-		writeJson(w, &json{_NO_CHANGE: true})
+		writeJson(w, &json{})
 		return
 	} else {
 		s, _ := getSession(w, r)
