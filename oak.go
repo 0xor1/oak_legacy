@@ -5,7 +5,6 @@ import(
 	`net/http`
 	`encoding/gob`
 	js `encoding/json`
-	`github.com/0xor1/sus`
 	`github.com/gorilla/mux`
 	`github.com/gorilla/sessions`
 )
@@ -15,6 +14,7 @@ const (
 	_JOIN 	= `/join`
 	_POLL 	= `/poll`
 	_ACT 	= `/act`
+	_LEAVE 	= `/leave`
 
 	_USER_ID	= `userId`
 	_ENTITY_ID	= `entityId`
@@ -32,17 +32,17 @@ type EntityStore interface{
 }
 
 type Entity interface {
-	sus.Version
+	GetVersion() int
 	IsActive() bool
 	CreatedBy() (userId string)
 	RegisterNewUser() (userId string, err error)
+	UnregisterUser(userId string) error
 	Kick() (updated bool)
-	Act(action interface{}) error
 }
 
 type GetJoinResp func(e Entity) map[string]interface{}
 type GetEntityChangeResp func(e Entity) map[string]interface{}
-type GetActParam func(r *http.Request) (param interface{}, err error)
+type PerformAct func(r *http.Request, e Entity) (err error)
 
 var (
 	sessionStore		sessions.Store
@@ -50,21 +50,22 @@ var (
 	entityStore			EntityStore
 	getJoinResp			GetJoinResp
 	getEntityChangeResp	GetEntityChangeResp
-	getActParam			GetActParam
+	performAct			PerformAct
 )
 
-func Route(router *mux.Router, sessStore sessions.Store, sessName string, e Entity, es EntityStore, gjr GetJoinResp, gecr GetEntityChangeResp, gap GetActParam){
+func Route(router *mux.Router, sessStore sessions.Store, sessName string, e Entity, es EntityStore, gjr GetJoinResp, gecr GetEntityChangeResp, pa PerformAct){
 	gob.Register(e)
 	sessionStore = sessStore
 	sessionName = sessName
 	entityStore = es
 	getJoinResp = getJoinResp
 	getEntityChangeResp = gecr
-	getActParam = gap
+	performAct = pa
 	router.Path(_CREATE).HandlerFunc(create)
 	router.Path(_JOIN).HandlerFunc(join)
 	router.Path(_POLL).HandlerFunc(poll)
 	router.Path(_ACT).HandlerFunc(act)
+	router.Path(_LEAVE).HandlerFunc(leave)
 }
 
 func create(w http.ResponseWriter, r *http.Request){
@@ -95,15 +96,11 @@ func join(w http.ResponseWriter, r *http.Request) {
 
 	s, _ := getSession(w, r)
 	if s.isNotEngaged() && entity.IsActive() {
-		if userId, err := entity.RegisterNewUser(); err != nil {
-			writeError(w, err)
-			return
-		} else if err := entityStore.Update(entityId, entity); err != nil {
-			writeError(w, err)
-			return
-		} else {
-			//entity was updated successfully this user is now active in this entity
-			s.set(userId, entityId, entity)
+		if userId, err := entity.RegisterNewUser(); err == nil {
+			if err := entityStore.Update(entityId, entity); err == nil {
+				//entity was updated successfully this user is now active in this entity
+				s.set(userId, entityId, entity)
+			}
 		}
 	}
 
@@ -151,13 +148,8 @@ func act(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	actParam, err := getActParam(r)
+	err := performAct(r, sessionEntity)
 	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	if err = sessionEntity.Act(actParam); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -169,7 +161,7 @@ func act(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = entity.Act(actParam); err != nil {
+	if err = performAct(r, entity); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -187,6 +179,42 @@ func act(w http.ResponseWriter, r *http.Request) {
 	respJson := getEntityChangeResp(entity)
 	respJson[_VERSION] = entity.GetVersion()
 	writeJson(w, &respJson)
+}
+
+func leave(w http.ResponseWriter, r *http.Request) {
+	s, _ := getSession(w, r)
+	entityId := s.getEntityId()
+	sessionEntity := s.getEntity()
+	if sessionEntity == nil{
+		s.clear()
+		return
+	}
+
+	err := sessionEntity.UnregisterUser(s.getUserId())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	entity, err := entityStore.Read(entityId)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	err = entity.UnregisterUser(s.getUserId())
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	err = entityStore.Update(entityId, entityId)
+	if err != nil {
+		writeError(w, err)
+		return
+	}
+
+	s.clear()
 }
 
 type session struct{
