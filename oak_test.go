@@ -11,26 +11,31 @@ import(
 	`github.com/stretchr/testify/assert`
 )
 
-func Test_play_with_no_existing_session(t *testing.T){
+func Test_create_with_no_existing_session(t *testing.T){
 	tss = &testSessionStore{}
 	tes = &testEntityStore{}
-	router := mux.NewRouter()
-	Route(router, tss, `test_session`, ) //TODO continue tomorrow
+	tr = mux.NewRouter()
+	gjr := func(e Entity)map[string]interface{}{return nil}
+	gecr := func(userId string, e Entity) map[string]interface{} {return nil}
+	pa := func(r *http.Request, userId string, e Entity) (err error) {return nil}
+	Route(tr, tss, `test_session`, &testEntity{}, tes, gjr, gecr, pa)
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(`POST`, _CREATE, nil)
 
-	router.ServeHTTP(w, r)
+	tr.ServeHTTP(w, r)
 
 	resp := json{}
 	readTestJson(w, &resp)
 	assert.Equal(t, `test_entity_id`, resp[_ID].(string), `response json should contain the returned entityId`)
 	assert.Equal(t, `test_creator_user_id`, tss.session.Values[_USER_ID], `session should have the provided user id`)
-	assert.Equal(t, resp[_ID].(string), tss.session.Values[_ID].(string), `session should have a entityId matching the json response`)
+	assert.Equal(t, resp[_ID].(string), tss.session.Values[_ENTITY_ID].(string), `session should have a entityId matching the json response`)
 }
 
 /**
  * helpers
  */
+
+var tr *mux.Router
 
 func readTestJson(w *httptest.ResponseRecorder, obj interface{}) error{
 	return js.Unmarshal(w.Body.Bytes(), obj)
@@ -78,7 +83,7 @@ type testEntityStore struct {
 	updateErr error
 }
 
-func (tes *testEntityStore) Create(r *http.Request) (entityId string, entity Entity, err error) {
+func (tes *testEntityStore) Create() (entityId string, entity Entity, err error) {
 	if tes.entity == nil {
 		tes.entity = &testEntity{}
 	}
@@ -127,21 +132,21 @@ func (te *testEntity) CreatedBy() string {
 	return `test_creator_user_id`
 }
 
-func (te *testEntity) RegisterNewUser() string {
+func (te *testEntity) RegisterNewUser() (string, error) {
 	if te.registerNewUser != nil {
 		return te.registerNewUser()
 	}
-	return `test_user_id`
+	return `test_user_id`, nil
 }
 
-func (te *testEntity) UnregisterUser() error {
+func (te *testEntity) UnregisterUser(userId string) error {
 	if te.unregisterUser != nil {
-		return te.unregisterUser()
+		return te.unregisterUser(userId)
 	}
 	return nil
 }
 
-func (te *testEntity) Kick() {
+func (te *testEntity) Kick() bool {
 	if te.kick != nil {
 		return te.kick()
 	}

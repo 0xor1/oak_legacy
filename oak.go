@@ -40,8 +40,8 @@ type Entity interface {
 }
 
 type GetJoinResp func(e Entity) map[string]interface{}
-type GetEntityChangeResp func(e Entity) map[string]interface{}
-type PerformAct func(r *http.Request, e Entity) (err error)
+type GetEntityChangeResp func(userId string, e Entity) map[string]interface{}
+type PerformAct func(r *http.Request, userId string, e Entity) (err error)
 
 var (
 	sessionStore		sessions.Store
@@ -133,7 +133,7 @@ func poll(w http.ResponseWriter, r *http.Request) {
 				s.clear()
 			}
 		}
-		respJson := getEntityChangeResp(entity)
+		respJson := getEntityChangeResp(s.getUserId(), entity)
 		respJson[_VERSION] = entity.GetVersion()
 		writeJson(w, &respJson)
 	}
@@ -141,13 +141,14 @@ func poll(w http.ResponseWriter, r *http.Request) {
 
 func act(w http.ResponseWriter, r *http.Request) {
 	s, _ := getSession(w, r)
+	userId := s.getUserId()
 	sessionEntity := s.getEntity()
 	if sessionEntity == nil {
 		writeError(w, errors.New(`no entity in session`))
 		return
 	}
 
-	err := performAct(r, sessionEntity)
+	err := performAct(r, userId, sessionEntity)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -160,7 +161,7 @@ func act(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = performAct(r, entity); err != nil {
+	if err = performAct(r, userId, entity); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -175,7 +176,7 @@ func act(w http.ResponseWriter, r *http.Request) {
 	} else {
 		s.clear()
 	}
-	respJson := getEntityChangeResp(entity)
+	respJson := getEntityChangeResp(userId, entity)
 	respJson[_VERSION] = entity.GetVersion()
 	writeJson(w, &respJson)
 }
@@ -207,7 +208,7 @@ func leave(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err = entityStore.Update(entityId, entityId)
+	err = entityStore.Update(entityId, entity)
 	if err != nil {
 		writeError(w, err)
 		return
