@@ -1,7 +1,8 @@
 package oak
 
 import(
-	//`errors`
+	`bytes`
+	`errors`
 	`testing`
 	`net/http`
 	js `encoding/json`
@@ -11,14 +12,11 @@ import(
 	`github.com/stretchr/testify/assert`
 )
 
-func Test_create_with_no_existing_session(t *testing.T){
+func Test_create_without_existing_session(t *testing.T){
 	tss = &testSessionStore{}
 	tes = &testEntityStore{}
 	tr = mux.NewRouter()
-	gjr := func(e Entity)map[string]interface{}{return nil}
-	gecr := func(userId string, e Entity) map[string]interface{} {return nil}
-	pa := func(r *http.Request, userId string, e Entity) (err error) {return nil}
-	Route(tr, tss, `test_session`, &testEntity{}, tes, gjr, gecr, pa)
+	Route(tr, tss, `test_session`, &testEntity{}, tes, nil, nil, nil)
 	w := httptest.NewRecorder()
 	r, _ := http.NewRequest(`POST`, _CREATE, nil)
 
@@ -29,6 +27,67 @@ func Test_create_with_no_existing_session(t *testing.T){
 	assert.Equal(t, `test_entity_id`, resp[_ID].(string), `response json should contain the returned entityId`)
 	assert.Equal(t, `test_creator_user_id`, tss.session.Values[_USER_ID], `session should have the provided user id`)
 	assert.Equal(t, resp[_ID].(string), tss.session.Values[_ENTITY_ID].(string), `session should have a entityId matching the json response`)
+	assert.Equal(t, tes.entity, tss.session.Values[_ENTITY].(*testEntity), `session should have the entity`)
+}
+
+func Test_create_with_existing_session(t *testing.T){
+	tss = &testSessionStore{}
+	tes = &testEntityStore{}
+	_, e, _ := tes.Create()
+	tr = mux.NewRouter()
+	Route(tr, tss, `test_session`, &testEntity{}, tes, nil, nil, nil)
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(`POST`, _CREATE, nil)
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	s.Values[_ENTITY] = e
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `test_pre_set_entity_id`, resp[_ID].(string), `response json should contain the returned entityId`)
+	assert.Equal(t, `test_pre_set_user_id`, tss.session.Values[_USER_ID], `session should have the provided user id`)
+	assert.Equal(t, resp[_ID].(string), tss.session.Values[_ENTITY_ID].(string), `session should have a entityId matching the json response`)
+}
+
+func Test_create_with_store_error(t *testing.T){
+	tss = &testSessionStore{}
+	tes = &testEntityStore{createErr:errors.New(`test_create_error`)}
+	tr = mux.NewRouter()
+	Route(tr, tss, `test_session`, &testEntity{}, tes, nil, nil, nil)
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(`POST`, _CREATE, nil)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_create_error\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session.Values[_USER_ID], `session should not have a userId`)
+	assert.Nil(t, tss.session.Values[_ENTITY_ID], `session should not have an entityId`)
+	assert.Nil(t, tss.session.Values[_ENTITY], `session should not have an entity`)
+}
+
+func Test_join_without_existing_session(t *testing.T){
+	tss = &testSessionStore{}
+	tes = &testEntityStore{}
+	tes.Create()
+	tr = mux.NewRouter()
+	gjr := func(e Entity)map[string]interface{}{return json{"test": "yo"}}
+	Route(tr, tss, `test_session`, &testEntity{}, tes, gjr, nil, nil)
+	w := httptest.NewRecorder()
+	r, _ := http.NewRequest(`POST`, _JOIN, bytes.NewBuffer([]byte(`{"`+_ID+`":"req_test_entity_id"}`)))
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+	assert.Equal(t, `test_user_id`, tss.session.Values[_USER_ID], `session should have the provided user id`)
+	assert.Equal(t, `req_test_entity_id`, tss.session.Values[_ENTITY_ID].(string), `session should have the entityId`)
+	assert.Equal(t, tes.entity, tss.session.Values[_ENTITY].(*testEntity), `session should have the entity`)
 }
 
 /**

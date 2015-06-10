@@ -2,6 +2,7 @@ package oak
 
 import(
 	`errors`
+	`strings`
 	`net/http`
 	`encoding/gob`
 	js `encoding/json`
@@ -57,7 +58,7 @@ func Route(router *mux.Router, sessStore sessions.Store, sessName string, e Enti
 	sessionStore = sessStore
 	sessionName = sessName
 	entityStore = es
-	getJoinResp = getJoinResp
+	getJoinResp = gjr
 	getEntityChangeResp = gecr
 	performAct = pa
 	router.Path(_CREATE).HandlerFunc(create)
@@ -341,11 +342,18 @@ func getRequestData(r *http.Request, isForPoll bool) (entityId string, version i
 }
 
 func fetchEntity(entityId string) (entity Entity, err error) {
-	entity, err = entityStore.Read(entityId)
-	if err == nil {
-		if entity.Kick() {
-			err = entityStore.Update(entityId, entity)
+	for { // is this insane? ... probably
+		entity, err = entityStore.Read(entityId)
+		if err == nil {
+			if entity.Kick() {
+				err = entityStore.Update(entityId, entity)
+				if err != nil && strings.Contains(err.Error(), `nonsequential update for entity with id "`+entityId+`"`) {
+					err = nil
+					continue
+				}
+			}
 		}
+		break
 	}
 	return
 }
