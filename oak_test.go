@@ -112,6 +112,29 @@ func Test_join_with_request_nonstring_id(t *testing.T) {
 	assert.Nil(t, tss.session, `session should not have been initialised`)
 }
 
+func Test_join_with_entity_store_read_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _JOIN, `{"`+_ID+`": "test_entity_id"}`)
+	tes.readErr = errors.New(`test_read_error`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_read_error\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
+func Test_join_with_entity_store_update_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _JOIN, `{"`+_ID+`": "test_entity_id"}`)
+	tes.updateErr = errors.New(`test_update_error`)
+	tes.entity = &testEntity{kick:func()bool{return true}}
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_update_error\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
 /**
  * helpers
  */
