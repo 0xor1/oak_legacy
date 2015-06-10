@@ -9,7 +9,7 @@ github.com\0xor1\oak\oak.go:84.51,86.16 2 1
 github.com\0xor1\oak\oak.go:91.2,92.16 2 1
 github.com\0xor1\oak\oak.go:97.2,98.43 2 1
 github.com\0xor1\oak\oak.go:107.2,109.25 3 1
-github.com\0xor1\oak\oak.go:86.16,89.3 2 0
+github.com\0xor1\oak\oak.go:86.16,89.3 2 1
 github.com\0xor1\oak\oak.go:92.16,95.3 2 0
 github.com\0xor1\oak\oak.go:98.43,99.58 1 1
 github.com\0xor1\oak\oak.go:99.58,100.63 1 1
@@ -78,8 +78,8 @@ github.com\0xor1\oak\oak.go:325.58,326.45 1 0
 github.com\0xor1\oak\oak.go:326.45,328.7 1 0
 github.com\0xor1\oak\oak.go:328.7,330.7 1 0
 github.com\0xor1\oak\oak.go:331.6,333.6 1 0
-github.com\0xor1\oak\oak.go:335.4,337.4 1 0
-github.com\0xor1\oak\oak.go:338.3,340.3 1 0
+github.com\0xor1\oak\oak.go:335.4,337.4 1 1
+github.com\0xor1\oak\oak.go:338.3,340.3 1 1
 github.com\0xor1\oak\oak.go:344.62,345.6 1 1
 github.com\0xor1\oak\oak.go:358.2,358.8 1 1
 github.com\0xor1\oak\oak.go:345.6,347.17 2 1

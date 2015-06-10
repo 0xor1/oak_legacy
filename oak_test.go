@@ -13,12 +13,7 @@ import(
 )
 
 func Test_create_without_existing_session(t *testing.T){
-	tss = &testSessionStore{}
-	tes = &testEntityStore{}
-	tr = mux.NewRouter()
-	Route(tr, tss, `test_session`, &testEntity{}, tes, nil, nil, nil)
-	w := httptest.NewRecorder()
-	r, _ := http.NewRequest(`POST`, _CREATE, nil)
+	w, r := setup(nil, nil, nil, _CREATE, ``)
 
 	tr.ServeHTTP(w, r)
 
@@ -31,34 +26,27 @@ func Test_create_without_existing_session(t *testing.T){
 }
 
 func Test_create_with_existing_session(t *testing.T){
-	tss = &testSessionStore{}
-	tes = &testEntityStore{}
-	_, e, _ := tes.Create()
-	tr = mux.NewRouter()
-	Route(tr, tss, `test_session`, &testEntity{}, tes, nil, nil, nil)
-	w := httptest.NewRecorder()
-	r, _ := http.NewRequest(`POST`, _CREATE, nil)
+	w, r := setup(nil, nil, nil, _CREATE, ``)
+	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
 	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
-	s.Values[_ENTITY] = e
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
 
 	tr.ServeHTTP(w, r)
 
 	resp := json{}
 	readTestJson(w, &resp)
-	assert.Equal(t, `test_pre_set_entity_id`, resp[_ID].(string), `response json should contain the returned entityId`)
-	assert.Equal(t, `test_pre_set_user_id`, tss.session.Values[_USER_ID], `session should have the provided user id`)
+	assert.Equal(t, `test_pre_set_entity_id`, resp[_ID].(string), `response json should have the existing entityId`)
+	assert.Equal(t, `test_pre_set_user_id`, tss.session.Values[_USER_ID], `session should have the existing user id`)
 	assert.Equal(t, resp[_ID].(string), tss.session.Values[_ENTITY_ID].(string), `session should have a entityId matching the json response`)
+	assert.Equal(t, entity, tss.session.Values[_ENTITY], `session should have the existing entity`)
 }
 
 func Test_create_with_store_error(t *testing.T){
-	tss = &testSessionStore{}
-	tes = &testEntityStore{createErr:errors.New(`test_create_error`)}
-	tr = mux.NewRouter()
-	Route(tr, tss, `test_session`, &testEntity{}, tes, nil, nil, nil)
-	w := httptest.NewRecorder()
-	r, _ := http.NewRequest(`POST`, _CREATE, nil)
+	w, r := setup(nil, nil, nil, _CREATE, ``)
+	tes.createErr = errors.New(`test_create_error`)
 
 	tr.ServeHTTP(w, r)
 
@@ -70,14 +58,8 @@ func Test_create_with_store_error(t *testing.T){
 }
 
 func Test_join_without_existing_session(t *testing.T){
-	tss = &testSessionStore{}
-	tes = &testEntityStore{}
+	w, r := setup(func(e Entity)map[string]interface{}{return json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
 	tes.Create()
-	tr = mux.NewRouter()
-	gjr := func(e Entity)map[string]interface{}{return json{"test": "yo"}}
-	Route(tr, tss, `test_session`, &testEntity{}, tes, gjr, nil, nil)
-	w := httptest.NewRecorder()
-	r, _ := http.NewRequest(`POST`, _JOIN, bytes.NewBuffer([]byte(`{"`+_ID+`":"req_test_entity_id"}`)))
 
 	tr.ServeHTTP(w, r)
 
@@ -90,6 +72,46 @@ func Test_join_without_existing_session(t *testing.T){
 	assert.Equal(t, tes.entity, tss.session.Values[_ENTITY].(*testEntity), `session should have the entity`)
 }
 
+func Test_join_with_existing_session(t *testing.T){
+	w, r := setup(func(e Entity)map[string]interface{}{return json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+	assert.Equal(t, `test_pre_set_user_id`, tss.session.Values[_USER_ID], `session should have the existing user id`)
+	assert.Equal(t, `test_pre_set_entity_id`, tss.session.Values[_ENTITY_ID], `response json should have the existing entityId`)
+	assert.Equal(t, entity, tss.session.Values[_ENTITY], `session should have the existing entity`)
+}
+
+func Test_join_with_request_missing_id(t *testing.T) {
+	w, r := setup(nil, nil, nil, _JOIN, `{}`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, _ID + " value must be included in request\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
+func Test_join_with_request_nonstring_id(t *testing.T) {
+	w, r := setup(nil, nil, nil, _JOIN, `{"`+_ID+`": true}`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, _ID + " must be a string value\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
 /**
  * helpers
  */
@@ -98,6 +120,21 @@ var tr *mux.Router
 
 func readTestJson(w *httptest.ResponseRecorder, obj interface{}) error{
 	return js.Unmarshal(w.Body.Bytes(), obj)
+}
+
+func setup(gjr GetJoinResp, gecr GetEntityChangeResp, pa PerformAct, path string, reqJson string) (*httptest.ResponseRecorder, *http.Request){
+	tss = &testSessionStore{}
+	tes = &testEntityStore{}
+	tr = mux.NewRouter()
+	Route(tr, tss, `test_session`, &testEntity{}, tes, gjr, gecr, pa)
+	w := httptest.NewRecorder()
+	var r *http.Request
+	if reqJson != `` {
+		r, _ = http.NewRequest(`POST`, path, bytes.NewBuffer([]byte(reqJson)))
+	} else {
+		r, _ = http.NewRequest(`POST`, path, nil)
+	}
+	return w, r
 }
 
 /**
