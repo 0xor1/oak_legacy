@@ -123,8 +123,17 @@ func Test_join_with_entity_store_read_error(t *testing.T) {
 	assert.Nil(t, tss.session, `session should not have been initialised`)
 }
 
-func Test_join_with_entity_store_update_error(t *testing.T) {
+func Test_join_with_entity_store_update_error_on_second_update_pass(t *testing.T) {
 	w, r := setup(nil, nil, nil, _JOIN, `{"`+_ID+`": "test_entity_id"}`)
+	callCount := 0
+	tes.update = func(entityId string, entity Entity) error{
+		if callCount == 0 {
+			callCount++
+			return errors.New(`nonsequential update for entity with id "test_entity_id"`)
+		} else {
+			return errors.New(`test_update_error`)
+		}
+	}
 	tes.updateErr = errors.New(`test_update_error`)
 	tes.entity = &testEntity{kick:func()bool{return true}}
 
@@ -200,6 +209,7 @@ type testEntityStore struct {
 	createErr error
 	readErr error
 	updateErr error
+	update func(entityId string, entity Entity) error
 }
 
 func (tes *testEntityStore) Create() (entityId string, entity Entity, err error) {
@@ -218,6 +228,9 @@ func (tes *testEntityStore) Read(entityId string) (Entity, error) {
 
 func (tes *testEntityStore) Update(entityId string, entity Entity) error {
 	tes.entity = entity.(*testEntity)
+	if tes.update != nil {
+		return tes.update(entityId, entity)
+	}
 	return tes.updateErr
 }
 
