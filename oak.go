@@ -125,19 +125,20 @@ func poll(w http.ResponseWriter, r *http.Request) {
 	if version == entity.GetVersion() {
 		writeJson(w, &json{})
 		return
-	} else {
-		s, _ := getSession(w, r)
-		if s.getEntityId() == entityId {
-			if entity.IsActive() {
-				s.set(s.getUserId(), entityId, entity)
-			} else {
-				s.clear()
-			}
-		}
-		respJson := getEntityChangeResp(s.getUserId(), entity)
-		respJson[_VERSION] = entity.GetVersion()
-		writeJson(w, &respJson)
 	}
+
+	s, _ := getSession(w, r)
+	userId := s.getUserId()
+	if s.getEntityId() == entityId {
+		if entity.IsActive() {
+			s.set(userId, entityId, entity)
+		} else {
+			s.clear()
+		}
+	}
+	respJson := getEntityChangeResp(userId, entity)
+	respJson[_VERSION] = entity.GetVersion()
+	writeJson(w, &respJson)
 }
 
 func act(w http.ResponseWriter, r *http.Request) {

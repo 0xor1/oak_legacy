@@ -144,6 +144,121 @@ func Test_join_with_entity_store_update_error_on_second_update_pass(t *testing.T
 	assert.Nil(t, tss.session, `session should not have been initialised`)
 }
 
+func Test_poll_with_no_change(t *testing.T) {
+	w, r := setup(nil, nil, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": 0}`)
+	tes.Create()
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, `{}`, w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 200, w.Code, `return code should be 200`)
+}
+
+func Test_poll_with_change(t *testing.T) {
+	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
+	tes.Create()
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+}
+
+func Test_poll_with_session_user_and_entity_is_active(t *testing.T) {
+	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_entity_id`
+	entity := &testEntity{kick:func()bool{return true}}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+	assert.Equal(t, `test_pre_set_user_id`, s.Values[_USER_ID], `session userId should be unchanged`)
+	assert.Equal(t, `test_entity_id`, s.Values[_ENTITY_ID], `session entityId should be unchanged`)
+	assert.NotEqual(t, entity, s.Values[_ENTITY], `session entity should not be it's original value`)
+	assert.Equal(t, tes.entity, s.Values[_ENTITY], `session entity should be updated to the stores entity`)
+}
+
+func Test_poll_with_session_user_and_entity_is_not_active(t *testing.T) {
+	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
+	tes.Create()
+	tes.entity.isActive = func()bool{return false}
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+	assert.Nil(t, s.Values[_USER_ID], `session should be completely cleared`)
+	assert.Nil(t, s.Values[_ENTITY_ID], `session should be completely cleared`)
+	assert.Nil(t, s.Values[_ENTITY], `session should be completely cleared`)
+}
+
+func Test_poll_with_entity_store_read_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": 0}`)
+	tes.readErr = errors.New(`test_read_error`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_read_error\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
+func Test_poll_with_request_missing_id(t *testing.T) {
+	w, r := setup(nil, nil, nil, _POLL, `{}`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, _ID + " value must be included in request\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
+func Test_poll_with_request_nonstring_id(t *testing.T) {
+	w, r := setup(nil, nil, nil, _POLL, `{"`+_ID+`": true}`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, _ID + " must be a string value\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
+func Test_poll_with_request_missing_version(t *testing.T) {
+	w, r := setup(nil, nil, nil, _POLL, `{"`+_ID+`": "test_entity_id"}`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, _VERSION + " value must be included in request\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
+func Test_poll_with_request_nonnumber_version(t *testing.T) {
+	w, r := setup(nil, nil, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": true}`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, _VERSION + " must be a number value\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
 /**
  * helpers
  */

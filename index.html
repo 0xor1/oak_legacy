@@ -54,7 +54,7 @@
 			<div id="nav">
 				<select id="files">
 				
-				<option value="file0">github.com\0xor1\oak\oak.go (50.9%)</option>
+				<option value="file0">github.com\0xor1\oak\oak.go (69.3%)</option>
 				
 				</select>
 			</div>
@@ -179,35 +179,36 @@ func join(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         writeJson(w, &amp;respJson)</span>
 }
 
-func poll(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
+func poll(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
         entityId, version, err := getRequestData(r, true)
-        if err != nil </span><span class="cov0" title="0">{
+        if err != nil </span><span class="cov8" title="1">{
                 writeError(w, err)
                 return
         }</span>
 
-        <span class="cov0" title="0">entity, err := fetchEntity(entityId)
-        if err != nil </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">entity, err := fetchEntity(entityId)
+        if err != nil </span><span class="cov8" title="1">{
                 writeError(w, err)
                 return
         }</span>
 
-        <span class="cov0" title="0">if version == entity.GetVersion() </span><span class="cov0" title="0">{
+        <span class="cov8" title="1">if version == entity.GetVersion() </span><span class="cov8" title="1">{
                 writeJson(w, &amp;json{})
                 return
-        }</span><span class="cov0" title="0"> else {
-                s, _ := getSession(w, r)
-                if s.getEntityId() == entityId </span><span class="cov0" title="0">{
-                        if entity.IsActive() </span><span class="cov0" title="0">{
-                                s.set(s.getUserId(), entityId, entity)
-                        }</span><span class="cov0" title="0"> else {
-                                s.clear()
-                        }</span>
-                }
-                <span class="cov0" title="0">respJson := getEntityChangeResp(s.getUserId(), entity)
-                respJson[_VERSION] = entity.GetVersion()
-                writeJson(w, &amp;respJson)</span>
+        }</span>
+
+        <span class="cov8" title="1">s, _ := getSession(w, r)
+        userId := s.getUserId()
+        if s.getEntityId() == entityId </span><span class="cov8" title="1">{
+                if entity.IsActive() </span><span class="cov8" title="1">{
+                        s.set(userId, entityId, entity)
+                }</span><span class="cov8" title="1"> else {
+                        s.clear()
+                }</span>
         }
+        <span class="cov8" title="1">respJson := getEntityChangeResp(userId, entity)
+        respJson[_VERSION] = entity.GetVersion()
+        writeJson(w, &amp;respJson)</span>
 }
 
 func act(w http.ResponseWriter, r *http.Request) <span class="cov0" title="0">{
@@ -342,7 +343,7 @@ func (s *session) set(userId string, entityId string, entity Entity) error <span
         return sessions.Save(s.request, s.writer)
 }</span>
 
-func (s *session) clear() error <span class="cov0" title="0">{
+func (s *session) clear() error <span class="cov8" title="1">{
         s.userId = ``
         s.entityId = ``
         s.entity = nil
@@ -354,7 +355,7 @@ func (s *session) isNotEngaged() bool <span class="cov8" title="1">{
         return s.entity == nil || !s.entity.IsActive()
 }</span>
 
-func (s *session) getUserId() string <span class="cov0" title="0">{
+func (s *session) getUserId() string <span class="cov8" title="1">{
         return s.userId
 }</span>
 
@@ -391,14 +392,14 @@ func getRequestData(r *http.Request, isForPoll bool) (entityId string, version i
         if idParam, exists := reqJson[_ID]; exists </span><span class="cov8" title="1">{
                 if id, ok := idParam.(string); ok </span><span class="cov8" title="1">{
                         entityId = id
-                        if isForPoll </span><span class="cov0" title="0">{
-                                if versionParam, exists := reqJson[_VERSION]; exists </span><span class="cov0" title="0">{
-                                        if v, ok := versionParam.(float64); ok </span><span class="cov0" title="0">{
+                        if isForPoll </span><span class="cov8" title="1">{
+                                if versionParam, exists := reqJson[_VERSION]; exists </span><span class="cov8" title="1">{
+                                        if v, ok := versionParam.(float64); ok </span><span class="cov8" title="1">{
                                                 version = int(v)
-                                        }</span><span class="cov0" title="0"> else {
+                                        }</span><span class="cov8" title="1"> else {
                                                 err = errors.New(_VERSION + ` must be a number value`)
                                         }</span>
-                                }<span class="cov0" title="0"> else {
+                                }<span class="cov8" title="1"> else {
                                         err = errors.New(_VERSION + ` value must be included in request`)
                                 }</span>
                         }
