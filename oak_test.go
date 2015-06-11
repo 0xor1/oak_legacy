@@ -259,6 +259,124 @@ func Test_poll_with_request_nonnumber_version(t *testing.T) {
 	assert.Nil(t, tss.session, `session should not have been initialised`)
 }
 
+func Test_act_success(t *testing.T) {
+	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{getVersion:func()int{return 0}}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+	assert.Equal(t, `test_pre_set_user_id`, s.Values[_USER_ID], `session should contain same userId`)
+	assert.Equal(t, `test_pre_set_entity_id`, s.Values[_ENTITY_ID], `session should contain same entityId`)
+	assert.NotEqual(t, entity, s.Values[_ENTITY], `session entity should not be it's original value`)
+	assert.Equal(t, tes.entity, s.Values[_ENTITY], `session entity should be updated to the stores entity`)
+}
+
+func Test_act_to_inactive_entity(t *testing.T) {
+	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	tes.Create()
+	tes.entity.isActive = func()bool{return false}
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	resp := json{}
+	readTestJson(w, &resp)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
+	assert.Nil(t, s.Values[_USER_ID], `session should have been cleared`)
+	assert.Nil(t, s.Values[_ENTITY_ID], `session should have been cleared`)
+	assert.Nil(t, s.Values[_ENTITY], `session should have been cleared`)
+}
+
+func Test_act_with_empty_session(t *testing.T) {
+	w, r := setup(nil, nil, nil, _ACT, ``)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "no entity in session\n", w.Body.String(), `response body should have error message`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_act_with_performAct_error_on_session_entity(t *testing.T) {
+	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{return errors.New(`test_perform_act_error`)}, _ACT, ``)
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_perform_act_error\n", w.Body.String(), `response body should have error message`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_act_with_read_error(t *testing.T) {
+	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	tes.readErr = errors.New(`test_read_error`)
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_read_error\n", w.Body.String(), `response body should have error message`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_act_with_performAct_error_on_stored_entity(t *testing.T) {
+	callCount := 0
+	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{
+		if callCount == 0 {
+			callCount++
+			return nil
+		}
+		return errors.New(`test_perform_act_error`)
+	}, _ACT, ``)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_perform_act_error\n", w.Body.String(), `response body should have error message`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_act_with_update_error(t *testing.T) {
+	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+	tes.updateErr = errors.New(`test_update_error`)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_update_error\n", w.Body.String(), `response body should have error message`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
 /**
  * helpers
  */
