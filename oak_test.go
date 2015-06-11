@@ -377,6 +377,93 @@ func Test_act_with_update_error(t *testing.T) {
 	assert.Equal(t, 500, w.Code, `response code should be 500`)
 }
 
+func Test_leave_without_session(t *testing.T) {
+	w, r := setup(nil, nil, nil, _LEAVE, ``)
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, ``, w.Body.String(), `response body should be empty`)
+	assert.Equal(t, 200, w.Code, `response code should be 200`)
+}
+
+func Test_leave_with_session(t *testing.T) {
+	w, r := setup(nil, nil, nil, _LEAVE, ``)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, ``, w.Body.String(), `response body should be empty`)
+	assert.Equal(t, 200, w.Code, `response code should be 200`)
+}
+
+func Test_leave_with_session_entity_unregister_user_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _LEAVE, ``)
+	tes.Create()
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{unregisterUser:func(s string)error{return errors.New(`test_unregister_user_error`)}}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_unregister_user_error\n", w.Body.String(), `response body should contain error`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_leave_with_read_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _LEAVE, ``)
+	tes.Create()
+	tes.readErr = errors.New(`test_read_error`)
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_read_error\n", w.Body.String(), `response body should contain error`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_leave_with_stored_entity_unregister_user_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _LEAVE, ``)
+	tes.Create()
+	tes.entity.unregisterUser = func(s string)error{return errors.New(`test_unregister_user_error`)}
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_unregister_user_error\n", w.Body.String(), `response body should contain error`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
+func Test_leave_with_update_error(t *testing.T) {
+	w, r := setup(nil, nil, nil, _LEAVE, ``)
+	tes.Create()
+	tes.updateErr = errors.New(`test_update_error`)
+	s, _ := tss.Get(r, ``)
+	s.Values[_USER_ID] = `test_pre_set_user_id`
+	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
+	entity := &testEntity{}
+	s.Values[_ENTITY] = entity
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "test_update_error\n", w.Body.String(), `response body should contain error`)
+	assert.Equal(t, 500, w.Code, `response code should be 500`)
+}
+
 /**
  * helpers
  */
