@@ -557,7 +557,7 @@ func (tes *testEntityStore) Update(entityId string, entity Entity) error {
 type testEntity struct {
 	getVersion func() int
 	isActive func() bool
-	createdBy func() string
+	ownedBy func() string
 	registerNewUser func() (string, error)
 	unregisterUser func(string) error
 	kick func() bool
@@ -577,9 +577,9 @@ func (te *testEntity) IsActive() bool {
 	return true
 }
 
-func (te *testEntity) CreatedBy() string {
-	if te.createdBy != nil {
-		return te.createdBy()
+func (te *testEntity) OwnedBy() string {
+	if te.ownedBy != nil {
+		return te.ownedBy()
 	}
 	return `test_creator_user_id`
 }

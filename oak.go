@@ -34,7 +34,7 @@ type EntityStore interface{
 type Entity interface {
 	GetVersion() int
 	IsActive() bool
-	CreatedBy() (userId string)
+	OwnedBy() (userId string)
 	RegisterNewUser() (userId string, err error)
 	UnregisterUser(userId string) error
 	Kick() (updated bool)
@@ -76,7 +76,7 @@ func create(w http.ResponseWriter, r *http.Request){
 			writeError(w, err)
 			return
 		}
-		s.set(entity.CreatedBy(), entityId, entity)
+		s.set(entity.OwnedBy(), entityId, entity)
 	}
 	writeJson(w, &json{_ID: s.getEntityId()})
 }
