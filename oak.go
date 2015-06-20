@@ -5,7 +5,7 @@ import(
 	`strings`
 	`net/http`
 	`encoding/gob`
-	`encoding/json`
+	js `encoding/json`
 	`github.com/gorilla/mux`
 	`github.com/gorilla/sessions`
 )
@@ -42,7 +42,7 @@ type Entity interface {
 
 type GetJoinResp func(userId string, e Entity) Json
 type GetEntityChangeResp func(userId string, e Entity) Json
-type PerformAct func(r *http.Request, userId string, e Entity) (err error)
+type PerformAct func(json Json, userId string, e Entity) (err error)
 
 var (
 	sessionStore		sessions.Store
@@ -150,7 +150,8 @@ func act(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := performAct(r, userId, sessionEntity)
+	json := readJson(r)
+	err := performAct(json, userId, sessionEntity)
 	if err != nil {
 		writeError(w, err)
 		return
@@ -163,7 +164,7 @@ func act(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err = performAct(r, userId, entity); err != nil {
+	if err = performAct(json, userId, entity); err != nil {
 		writeError(w, err)
 		return
 	}
@@ -300,16 +301,20 @@ func (s *session) getEntity() Entity {
 type Json map[string]interface{}
 
 func writeJson(w http.ResponseWriter, obj interface{}) error{
-	js, err := json.Marshal(obj)
+	js, err := js.Marshal(obj)
 	w.Header().Set(`Content-Type`, `application/json`)
 	w.Write(js)
 	return err
 }
 
-func ReadJson(r *http.Request, obj interface{}) error{
-	decoder := json.NewDecoder(r.Body)
-	err := decoder.Decode(obj)
-	return err
+func readJson(r *http.Request) Json {
+	json := Json{}
+	if r.Body == nil {
+		return json
+	}
+	decoder := js.NewDecoder(r.Body)
+	decoder.Decode(&json)
+	return json
 }
 
 func writeError(w http.ResponseWriter, err error){
@@ -317,8 +322,7 @@ func writeError(w http.ResponseWriter, err error){
 }
 
 func getRequestData(r *http.Request, isForPoll bool) (entityId string, version int, err error) {
-	reqJson := Json{}
-	ReadJson(r, &reqJson)
+	reqJson := readJson(r)
 	if idParam, exists := reqJson[_ID]; exists {
 		if id, ok := idParam.(string); ok {
 			entityId = id

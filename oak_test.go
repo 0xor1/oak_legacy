@@ -260,7 +260,7 @@ func Test_poll_with_request_nonnumber_version(t *testing.T) {
 }
 
 func Test_act_success(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, func(json Json, userId string, e Entity)error{return nil}, _ACT, ``)
 	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
@@ -281,7 +281,7 @@ func Test_act_success(t *testing.T) {
 }
 
 func Test_act_to_inactive_entity(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, func(json Json, userId string, e Entity)error{return nil}, _ACT, ``)
 	tes.Create()
 	tes.entity.isActive = func()bool{return false}
 	s, _ := tss.Get(r, ``)
@@ -311,7 +311,7 @@ func Test_act_with_empty_session(t *testing.T) {
 }
 
 func Test_act_with_performAct_error_on_session_entity(t *testing.T) {
-	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{return errors.New(`test_perform_act_error`)}, _ACT, ``)
+	w, r := setup(nil, nil, func(json Json, userId string, e Entity)error{return errors.New(`test_perform_act_error`)}, _ACT, ``)
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
 	s.Values[_ENTITY_ID] = `test_pre_set_entity_id`
@@ -325,7 +325,7 @@ func Test_act_with_performAct_error_on_session_entity(t *testing.T) {
 }
 
 func Test_act_with_read_error(t *testing.T) {
-	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	w, r := setup(nil, nil, func(json Json, userId string, e Entity)error{return nil}, _ACT, ``)
 	tes.readErr = errors.New(`test_read_error`)
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
@@ -341,7 +341,7 @@ func Test_act_with_read_error(t *testing.T) {
 
 func Test_act_with_performAct_error_on_stored_entity(t *testing.T) {
 	callCount := 0
-	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{
+	w, r := setup(nil, nil, func(json Json, userId string, e Entity)error{
 		if callCount == 0 {
 			callCount++
 			return nil
@@ -362,7 +362,7 @@ func Test_act_with_performAct_error_on_stored_entity(t *testing.T) {
 }
 
 func Test_act_with_update_error(t *testing.T) {
-	w, r := setup(nil, nil, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	w, r := setup(nil, nil, func(json Json, userId string, e Entity)error{return nil}, _ACT, ``)
 	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
