@@ -110,8 +110,8 @@ type Entity interface {
         Kick() (updated bool)
 }
 
-type GetJoinResp func(userId string, e Entity) map[string]interface{}
-type GetEntityChangeResp func(userId string, e Entity) map[string]interface{}
+type GetJoinResp func(userId string, e Entity) Json
+type GetEntityChangeResp func(userId string, e Entity) Json
 type PerformAct func(r *http.Request, userId string, e Entity) (err error)
 
 var (

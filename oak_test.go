@@ -58,7 +58,7 @@ func Test_create_with_store_error(t *testing.T){
 }
 
 func Test_join_without_existing_session(t *testing.T){
-	w, r := setup(func(userId string, e Entity)map[string]interface{}{return Json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
+	w, r := setup(func(userId string, e Entity)Json{return Json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
 	tes.Create()
 
 	tr.ServeHTTP(w, r)
@@ -73,7 +73,7 @@ func Test_join_without_existing_session(t *testing.T){
 }
 
 func Test_join_with_existing_session(t *testing.T){
-	w, r := setup(func(userId string, e Entity)map[string]interface{}{return Json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
+	w, r := setup(func(userId string, e Entity)Json{return Json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
 	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
@@ -155,7 +155,7 @@ func Test_poll_with_no_change(t *testing.T) {
 }
 
 func Test_poll_with_change(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return Json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
 	tes.Create()
 
 	tr.ServeHTTP(w, r)
@@ -167,7 +167,7 @@ func Test_poll_with_change(t *testing.T) {
 }
 
 func Test_poll_with_session_user_and_entity_is_active(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return Json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
 	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
@@ -188,7 +188,7 @@ func Test_poll_with_session_user_and_entity_is_active(t *testing.T) {
 }
 
 func Test_poll_with_session_user_and_entity_is_not_active(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return Json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": -1}`)
 	tes.Create()
 	tes.entity.isActive = func()bool{return false}
 	s, _ := tss.Get(r, ``)
@@ -260,7 +260,7 @@ func Test_poll_with_request_nonnumber_version(t *testing.T) {
 }
 
 func Test_act_success(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return Json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
 	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
@@ -281,7 +281,7 @@ func Test_act_success(t *testing.T) {
 }
 
 func Test_act_to_inactive_entity(t *testing.T) {
-	w, r := setup(nil, func(userId string, entity Entity)map[string]interface{}{return Json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
+	w, r := setup(nil, func(userId string, entity Entity)Json{return Json{"test": "yo"}}, func(r *http.Request, userId string, e Entity)error{return nil}, _ACT, ``)
 	tes.Create()
 	tes.entity.isActive = func()bool{return false}
 	s, _ := tss.Get(r, ``)
