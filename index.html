@@ -75,7 +75,7 @@ import(
         `strings`
         `net/http`
         `encoding/gob`
-        `encoding/json`
+        js `encoding/json`
         `github.com/gorilla/mux`
         `github.com/gorilla/sessions`
 )
@@ -112,7 +112,7 @@ type Entity interface {
 
 type GetJoinResp func(userId string, e Entity) Json
 type GetEntityChangeResp func(userId string, e Entity) Json
-type PerformAct func(r *http.Request, userId string, e Entity) (err error)
+type PerformAct func(json Json, userId string, e Entity) (err error)
 
 var (
         sessionStore                sessions.Store
@@ -220,7 +220,8 @@ func act(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
                 return
         }</span>
 
-        <span class="cov8" title="1">err := performAct(r, userId, sessionEntity)
+        <span class="cov8" title="1">json := readJson(r)
+        err := performAct(json, userId, sessionEntity)
         if err != nil </span><span class="cov8" title="1">{
                 writeError(w, err)
                 return
@@ -233,7 +234,7 @@ func act(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
                 return
         }</span>
 
-        <span class="cov8" title="1">if err = performAct(r, userId, entity); err != nil </span><span class="cov8" title="1">{
+        <span class="cov8" title="1">if err = performAct(json, userId, entity); err != nil </span><span class="cov8" title="1">{
                 writeError(w, err)
                 return
         }</span>
@@ -370,25 +371,28 @@ func (s *session) getEntity() Entity <span class="cov8" title="1">{
 type Json map[string]interface{}
 
 func writeJson(w http.ResponseWriter, obj interface{}) error<span class="cov8" title="1">{
-        js, err := json.Marshal(obj)
+        js, err := js.Marshal(obj)
         w.Header().Set(`Content-Type`, `application/json`)
         w.Write(js)
         return err
 }</span>
 
-func ReadJson(r *http.Request, obj interface{}) error<span class="cov8" title="1">{
-        decoder := json.NewDecoder(r.Body)
-        err := decoder.Decode(obj)
-        return err
-}</span>
+func readJson(r *http.Request) Json <span class="cov8" title="1">{
+        json := Json{}
+        if r.Body == nil </span><span class="cov8" title="1">{
+                return json
+        }</span>
+        <span class="cov8" title="1">decoder := js.NewDecoder(r.Body)
+        decoder.Decode(&amp;json)
+        return json</span>
+}
 
 func writeError(w http.ResponseWriter, err error)<span class="cov8" title="1">{
         http.Error(w, err.Error(), 500)
 }</span>
 
 func getRequestData(r *http.Request, isForPoll bool) (entityId string, version int, err error) <span class="cov8" title="1">{
-        reqJson := Json{}
-        ReadJson(r, &amp;reqJson)
+        reqJson := readJson(r)
         if idParam, exists := reqJson[_ID]; exists </span><span class="cov8" title="1">{
                 if id, ok := idParam.(string); ok </span><span class="cov8" title="1">{
                         entityId = id
