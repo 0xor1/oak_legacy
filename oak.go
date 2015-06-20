@@ -5,7 +5,7 @@ import(
 	`strings`
 	`net/http`
 	`encoding/gob`
-	js `encoding/json`
+	`encoding/json`
 	`github.com/gorilla/mux`
 	`github.com/gorilla/sessions`
 )
@@ -78,7 +78,7 @@ func create(w http.ResponseWriter, r *http.Request){
 		}
 		s.set(entity.CreatedBy(), entityId, entity)
 	}
-	writeJson(w, &json{_ID: s.getEntityId()})
+	writeJson(w, &Json{_ID: s.getEntityId()})
 }
 
 func join(w http.ResponseWriter, r *http.Request) {
@@ -123,7 +123,7 @@ func poll(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if version == entity.GetVersion() {
-		writeJson(w, &json{})
+		writeJson(w, &Json{})
 		return
 	}
 
@@ -297,17 +297,17 @@ func (s *session) getEntity() Entity {
 	return s.entity
 }
 
-type json map[string]interface{}
+type Json map[string]interface{}
 
 func writeJson(w http.ResponseWriter, obj interface{}) error{
-	js, err := js.Marshal(obj)
+	js, err := json.Marshal(obj)
 	w.Header().Set(`Content-Type`, `application/json`)
 	w.Write(js)
 	return err
 }
 
-func readJson(r *http.Request, obj interface{}) error{
-	decoder := js.NewDecoder(r.Body)
+func ReadJson(r *http.Request, obj interface{}) error{
+	decoder := json.NewDecoder(r.Body)
 	err := decoder.Decode(obj)
 	return err
 }
@@ -317,8 +317,8 @@ func writeError(w http.ResponseWriter, err error){
 }
 
 func getRequestData(r *http.Request, isForPoll bool) (entityId string, version int, err error) {
-	reqJson := json{}
-	readJson(r, &reqJson)
+	reqJson := Json{}
+	ReadJson(r, &reqJson)
 	if idParam, exists := reqJson[_ID]; exists {
 		if id, ok := idParam.(string); ok {
 			entityId = id
