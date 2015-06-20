@@ -34,13 +34,13 @@ type EntityStore interface{
 type Entity interface {
 	GetVersion() int
 	IsActive() bool
-	OwnedBy() (userId string)
+	CreatedBy() (userId string)
 	RegisterNewUser() (userId string, err error)
 	UnregisterUser(userId string) error
 	Kick() (updated bool)
 }
 
-type GetJoinResp func(e Entity) map[string]interface{}
+type GetJoinResp func(userId string, e Entity) map[string]interface{}
 type GetEntityChangeResp func(userId string, e Entity) map[string]interface{}
 type PerformAct func(r *http.Request, userId string, e Entity) (err error)
 
@@ -76,7 +76,7 @@ func create(w http.ResponseWriter, r *http.Request){
 			writeError(w, err)
 			return
 		}
-		s.set(entity.OwnedBy(), entityId, entity)
+		s.set(entity.CreatedBy(), entityId, entity)
 	}
 	writeJson(w, &json{_ID: s.getEntityId()})
 }
@@ -104,7 +104,7 @@ func join(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	respJson := getJoinResp(entity)
+	respJson := getJoinResp(s.getUserId(), entity)
 	respJson[_VERSION] = entity.GetVersion()
 	writeJson(w, &respJson)
 }

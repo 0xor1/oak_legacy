@@ -104,13 +104,13 @@ type EntityStore interface{
 type Entity interface {
         GetVersion() int
         IsActive() bool
-        OwnedBy() (userId string)
+        CreatedBy() (userId string)
         RegisterNewUser() (userId string, err error)
         UnregisterUser(userId string) error
         Kick() (updated bool)
 }
 
-type GetJoinResp func(e Entity) map[string]interface{}
+type GetJoinResp func(userId string, e Entity) map[string]interface{}
 type GetEntityChangeResp func(userId string, e Entity) map[string]interface{}
 type PerformAct func(r *http.Request, userId string, e Entity) (err error)
 
@@ -146,7 +146,7 @@ func create(w http.ResponseWriter, r *http.Request)<span class="cov8" title="1">
                         writeError(w, err)
                         return
                 }</span>
-                <span class="cov8" title="1">s.set(entity.OwnedBy(), entityId, entity)</span>
+                <span class="cov8" title="1">s.set(entity.CreatedBy(), entityId, entity)</span>
         }
         <span class="cov8" title="1">writeJson(w, &amp;json{_ID: s.getEntityId()})</span>
 }
@@ -174,7 +174,7 @@ func join(w http.ResponseWriter, r *http.Request) <span class="cov8" title="1">{
                 }
         }
 
-        <span class="cov8" title="1">respJson := getJoinResp(entity)
+        <span class="cov8" title="1">respJson := getJoinResp(s.getUserId(), entity)
         respJson[_VERSION] = entity.GetVersion()
         writeJson(w, &amp;respJson)</span>
 }

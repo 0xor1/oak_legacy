@@ -58,7 +58,7 @@ func Test_create_with_store_error(t *testing.T){
 }
 
 func Test_join_without_existing_session(t *testing.T){
-	w, r := setup(func(e Entity)map[string]interface{}{return json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
+	w, r := setup(func(userId string, e Entity)map[string]interface{}{return json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
 	tes.Create()
 
 	tr.ServeHTTP(w, r)
@@ -73,7 +73,7 @@ func Test_join_without_existing_session(t *testing.T){
 }
 
 func Test_join_with_existing_session(t *testing.T){
-	w, r := setup(func(e Entity)map[string]interface{}{return json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
+	w, r := setup(func(userId string, e Entity)map[string]interface{}{return json{"test": "yo"}}, nil, nil, _JOIN, `{"`+_ID+`":"req_test_entity_id"}`)
 	tes.Create()
 	s, _ := tss.Get(r, ``)
 	s.Values[_USER_ID] = `test_pre_set_user_id`
@@ -557,7 +557,7 @@ func (tes *testEntityStore) Update(entityId string, entity Entity) error {
 type testEntity struct {
 	getVersion func() int
 	isActive func() bool
-	ownedBy func() string
+	createdBy func() string
 	registerNewUser func() (string, error)
 	unregisterUser func(string) error
 	kick func() bool
@@ -577,9 +577,9 @@ func (te *testEntity) IsActive() bool {
 	return true
 }
 
-func (te *testEntity) OwnedBy() string {
-	if te.ownedBy != nil {
-		return te.ownedBy()
+func (te *testEntity) CreatedBy() string {
+	if te.createdBy != nil {
+		return te.createdBy()
 	}
 	return `test_creator_user_id`
 }
