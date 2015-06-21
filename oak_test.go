@@ -144,6 +144,22 @@ func Test_join_with_entity_store_update_error_on_second_update_pass(t *testing.T
 	assert.Nil(t, tss.session, `session should not have been initialised`)
 }
 
+func Test_join_with_never_ending_nonsequential_update_errors(t *testing.T) {
+	w, r := setup(nil, nil, nil, _JOIN, `{"`+_ID+`": "test_entity_id"}`)
+	callCount := 0
+	tes.update = func(entityId string, entity Entity) error{
+		callCount++
+		return errors.New(`nonsequential update for entity with id "test_entity_id"`)
+	}
+	tes.entity = &testEntity{kick:func()bool{return true}}
+
+	tr.ServeHTTP(w, r)
+
+	assert.Equal(t, "nonsequential update for entity with id \"test_entity_id\"\n", w.Body.String(), `response body should be error message`)
+	assert.Equal(t, 500, w.Code, `return code should be 500`)
+	assert.Nil(t, tss.session, `session should not have been initialised`)
+}
+
 func Test_poll_with_no_change(t *testing.T) {
 	w, r := setup(nil, nil, nil, _POLL, `{"`+_ID+`": "test_entity_id", "`+_VERSION+`": 0}`)
 	tes.Create()
@@ -272,7 +288,7 @@ func Test_act_success(t *testing.T) {
 
 	resp := Json{}
 	readTestJson(w, &resp)
-	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getEntityChangeResp`)
 	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
 	assert.Equal(t, `test_pre_set_user_id`, s.Values[_USER_ID], `session should contain same userId`)
 	assert.Equal(t, `test_pre_set_entity_id`, s.Values[_ENTITY_ID], `session should contain same entityId`)
@@ -294,7 +310,7 @@ func Test_act_to_inactive_entity(t *testing.T) {
 
 	resp := Json{}
 	readTestJson(w, &resp)
-	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getJoinResp`)
+	assert.Equal(t, `yo`, resp[`test`].(string), `response json should contain the returned data from getEntityChangeResp`)
 	assert.Equal(t, 0, int(resp[_VERSION].(float64)), `response json should contain the version number`)
 	assert.Nil(t, s.Values[_USER_ID], `session should have been cleared`)
 	assert.Nil(t, s.Values[_ENTITY_ID], `session should have been cleared`)
@@ -462,21 +478,6 @@ func Test_leave_with_update_error(t *testing.T) {
 
 	assert.Equal(t, "test_update_error\n", w.Body.String(), `response body should contain error`)
 	assert.Equal(t, 500, w.Code, `response code should be 500`)
-}
-
-func Test_fetchEntity_cancels_loop_on_second_attempt(t *testing.T) {
-	tes = &testEntityStore{}
-	invokeCount := 0
-	tes.update = func(entityId string, e Entity)error{
-		invokeCount++
-		return errors.New(`nonsequential update for entity with id "`+entityId+`"`)
-	}
-	tes.Create()
-	entityStore = tes
-	tes.entity.kick = func()bool{return true}
-	_, err := fetchEntity(`yo`)
-	assert.Equal(t, 2, invokeCount, ``)
-	assert.Equal(t, `nonsequential update for entity with id "yo"`, err.Error(), ``)
 }
 
 /**

@@ -44,180 +44,218 @@ type GetJoinResp func(userId string, e Entity) Json
 type GetEntityChangeResp func(userId string, e Entity) Json
 type PerformAct func(json Json, userId string, e Entity) (err error)
 
-var (
-	sessionStore		sessions.Store
-	sessionName			string
-	entityStore			EntityStore
-	getJoinResp			GetJoinResp
-	getEntityChangeResp	GetEntityChangeResp
-	performAct			PerformAct
-)
+func Route(router *mux.Router, sessionStore sessions.Store, sessionName string, entity Entity, entityStore EntityStore, getJoinResp GetJoinResp, getEntityChangeResp GetEntityChangeResp, performAct PerformAct){
+	gob.Register(entity)
 
-func Route(router *mux.Router, sessStore sessions.Store, sessName string, e Entity, es EntityStore, gjr GetJoinResp, gecr GetEntityChangeResp, pa PerformAct){
-	gob.Register(e)
-	sessionStore = sessStore
-	sessionName = sessName
-	entityStore = es
-	getJoinResp = gjr
-	getEntityChangeResp = gecr
-	performAct = pa
+	getSession := func(w http.ResponseWriter, r *http.Request) (*session, error) {
+		s, err := sessionStore.Get(r, sessionName)
+
+		session := &session{
+			writer: w,
+			request: r,
+			internalSession: s,
+		}
+
+		var val interface{}
+		var exists bool
+
+		if val, exists = s.Values[_USER_ID]; exists {
+			session.userId = val.(string)
+		}else{
+			session.userId = ``
+		}
+
+		if val, exists = s.Values[_ENTITY_ID]; exists {
+			session.entityId = val.(string)
+		}else{
+			session.entityId = ``
+		}
+
+		if val, exists = s.Values[_ENTITY]; exists && val != nil {
+			session.entity = val.(Entity)
+		}else{
+			session.entity = nil
+		}
+
+		return session, err
+	}
+
+	fetchEntity := func(entityId string) (entity Entity, err error) {
+		retryCount := 0
+		for {
+			entity, err = entityStore.Read(entityId)
+			if err == nil {
+				if entity.Kick() {
+					err = entityStore.Update(entityId, entity)
+					if err != nil && retryCount == 0 && strings.Contains(err.Error(), `nonsequential update for entity with id "`+entityId+`"`) {
+						err = nil
+						retryCount++
+						continue
+					}
+				}
+			}
+			break
+		}
+		return
+	}
+
+	create := func(w http.ResponseWriter, r *http.Request){
+		s, _ := getSession(w, r)
+		if s.isNotEngaged() {
+			entityId, entity, err := entityStore.Create()
+			if err != nil {
+				writeError(w, err)
+				return
+			}
+			s.set(entity.CreatedBy(), entityId, entity)
+		}
+		writeJson(w, &Json{_ID: s.getEntityId()})
+	}
+
+	join := func(w http.ResponseWriter, r *http.Request) {
+		entityId, _, err := getRequestData(r, false)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		entity, err := fetchEntity(entityId)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		s, _ := getSession(w, r)
+		if s.isNotEngaged() && entity.IsActive() {
+			if userId, err := entity.RegisterNewUser(); err == nil {
+				if err := entityStore.Update(entityId, entity); err == nil {
+					//entity was updated successfully this user is now active in this entity
+					s.set(userId, entityId, entity)
+				}
+			}
+		}
+
+		respJson := getJoinResp(s.getUserId(), entity)
+		respJson[_VERSION] = entity.GetVersion()
+		writeJson(w, &respJson)
+	}
+
+	poll := func(w http.ResponseWriter, r *http.Request) {
+		entityId, version, err := getRequestData(r, true)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		entity, err := fetchEntity(entityId)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		if version == entity.GetVersion() {
+			writeJson(w, &Json{})
+			return
+		}
+
+		s, _ := getSession(w, r)
+		userId := s.getUserId()
+		if s.getEntityId() == entityId {
+			if entity.IsActive() {
+				s.set(userId, entityId, entity)
+			} else {
+				s.clear()
+			}
+		}
+		respJson := getEntityChangeResp(userId, entity)
+		respJson[_VERSION] = entity.GetVersion()
+		writeJson(w, &respJson)
+	}
+
+	act := func(w http.ResponseWriter, r *http.Request) {
+		s, _ := getSession(w, r)
+		userId := s.getUserId()
+		sessionEntity := s.getEntity()
+		if sessionEntity == nil {
+			writeError(w, errors.New(`no entity in session`))
+			return
+		}
+
+		json := readJson(r)
+		err := performAct(json, userId, sessionEntity)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		entityId := s.getEntityId()
+		entity, err := fetchEntity(entityId)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		if err = performAct(json, userId, entity); err != nil {
+			writeError(w, err)
+			return
+		}
+
+		if err = entityStore.Update(entityId, entity); err != nil {
+			writeError(w, err)
+			return
+		}
+
+		if entity.IsActive() {
+			s.set(s.getUserId(), entityId, entity)
+		} else {
+			s.clear()
+		}
+		respJson := getEntityChangeResp(userId, entity)
+		respJson[_VERSION] = entity.GetVersion()
+		writeJson(w, &respJson)
+	}
+
+	leave := func(w http.ResponseWriter, r *http.Request) {
+		s, _ := getSession(w, r)
+		entityId := s.getEntityId()
+		sessionEntity := s.getEntity()
+		if sessionEntity == nil{
+			s.clear()
+			return
+		}
+
+		err := sessionEntity.UnregisterUser(s.getUserId())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		entity, err := entityStore.Read(entityId)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		err = entity.UnregisterUser(s.getUserId())
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		err = entityStore.Update(entityId, entity)
+		if err != nil {
+			writeError(w, err)
+			return
+		}
+
+		s.clear()
+	}
+
 	router.Path(_CREATE).HandlerFunc(create)
 	router.Path(_JOIN).HandlerFunc(join)
 	router.Path(_POLL).HandlerFunc(poll)
 	router.Path(_ACT).HandlerFunc(act)
 	router.Path(_LEAVE).HandlerFunc(leave)
-}
-
-func create(w http.ResponseWriter, r *http.Request){
-	s, _ := getSession(w, r)
-	if s.isNotEngaged() {
-		entityId, entity, err := entityStore.Create()
-		if err != nil {
-			writeError(w, err)
-			return
-		}
-		s.set(entity.CreatedBy(), entityId, entity)
-	}
-	writeJson(w, &Json{_ID: s.getEntityId()})
-}
-
-func join(w http.ResponseWriter, r *http.Request) {
-	entityId, _, err := getRequestData(r, false)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	entity, err := fetchEntity(entityId)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	s, _ := getSession(w, r)
-	if s.isNotEngaged() && entity.IsActive() {
-		if userId, err := entity.RegisterNewUser(); err == nil {
-			if err := entityStore.Update(entityId, entity); err == nil {
-				//entity was updated successfully this user is now active in this entity
-				s.set(userId, entityId, entity)
-			}
-		}
-	}
-
-	respJson := getJoinResp(s.getUserId(), entity)
-	respJson[_VERSION] = entity.GetVersion()
-	writeJson(w, &respJson)
-}
-
-func poll(w http.ResponseWriter, r *http.Request) {
-	entityId, version, err := getRequestData(r, true)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	entity, err := fetchEntity(entityId)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	if version == entity.GetVersion() {
-		writeJson(w, &Json{})
-		return
-	}
-
-	s, _ := getSession(w, r)
-	userId := s.getUserId()
-	if s.getEntityId() == entityId {
-		if entity.IsActive() {
-			s.set(userId, entityId, entity)
-		} else {
-			s.clear()
-		}
-	}
-	respJson := getEntityChangeResp(userId, entity)
-	respJson[_VERSION] = entity.GetVersion()
-	writeJson(w, &respJson)
-}
-
-func act(w http.ResponseWriter, r *http.Request) {
-	s, _ := getSession(w, r)
-	userId := s.getUserId()
-	sessionEntity := s.getEntity()
-	if sessionEntity == nil {
-		writeError(w, errors.New(`no entity in session`))
-		return
-	}
-
-	json := readJson(r)
-	err := performAct(json, userId, sessionEntity)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	entityId := s.getEntityId()
-	entity, err := fetchEntity(entityId)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	if err = performAct(json, userId, entity); err != nil {
-		writeError(w, err)
-		return
-	}
-
-	if err = entityStore.Update(entityId, entity); err != nil {
-		writeError(w, err)
-		return
-	}
-
-	if entity.IsActive() {
-		s.set(s.getUserId(), entityId, entity)
-	} else {
-		s.clear()
-	}
-	respJson := getEntityChangeResp(userId, entity)
-	respJson[_VERSION] = entity.GetVersion()
-	writeJson(w, &respJson)
-}
-
-func leave(w http.ResponseWriter, r *http.Request) {
-	s, _ := getSession(w, r)
-	entityId := s.getEntityId()
-	sessionEntity := s.getEntity()
-	if sessionEntity == nil{
-		s.clear()
-		return
-	}
-
-	err := sessionEntity.UnregisterUser(s.getUserId())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	entity, err := entityStore.Read(entityId)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	err = entity.UnregisterUser(s.getUserId())
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	err = entityStore.Update(entityId, entity)
-	if err != nil {
-		writeError(w, err)
-		return
-	}
-
-	s.clear()
 }
 
 type session struct{
@@ -227,39 +265,6 @@ type session struct{
 	userId string
 	entityId string
 	entity Entity
-}
-
-func getSession(w http.ResponseWriter, r *http.Request) (*session, error) {
-	s, err := sessionStore.Get(r, sessionName)
-
-	session := &session{
-		writer: w,
-		request: r,
-		internalSession: s,
-	}
-
-	var val interface{}
-	var exists bool
-
-	if val, exists = s.Values[_USER_ID]; exists {
-		session.userId = val.(string)
-	}else{
-		session.userId = ``
-	}
-
-	if val, exists = s.Values[_ENTITY_ID]; exists {
-		session.entityId = val.(string)
-	}else{
-		session.entityId = ``
-	}
-
-	if val, exists = s.Values[_ENTITY]; exists && val != nil {
-		session.entity = val.(Entity)
-	}else{
-		session.entity = nil
-	}
-
-	return session, err
 }
 
 func (s *session) set(userId string, entityId string, entity Entity) error {
@@ -342,25 +347,6 @@ func getRequestData(r *http.Request, isForPoll bool) (entityId string, version i
 		}
 	} else {
 		err = errors.New(_ID +` value must be included in request`)
-	}
-	return
-}
-
-func fetchEntity(entityId string) (entity Entity, err error) {
-	retryCount := 0
-	for {
-		entity, err = entityStore.Read(entityId)
-		if err == nil {
-			if entity.Kick() {
-				err = entityStore.Update(entityId, entity)
-				if err != nil && retryCount == 0 && strings.Contains(err.Error(), `nonsequential update for entity with id "`+entityId+`"`) {
-					err = nil
-					retryCount++
-					continue
-				}
-			}
-		}
-		break
 	}
 	return
 }
