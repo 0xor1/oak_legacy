@@ -464,6 +464,21 @@ func Test_leave_with_update_error(t *testing.T) {
 	assert.Equal(t, 500, w.Code, `response code should be 500`)
 }
 
+func Test_fetchEntity_cancels_loop_on_second_attempt(t *testing.T) {
+	tes = &testEntityStore{}
+	invokeCount := 0
+	tes.update = func(entityId string, e Entity)error{
+		invokeCount++
+		return errors.New(`nonsequential update for entity with id "`+entityId+`"`)
+	}
+	tes.Create()
+	entityStore = tes
+	tes.entity.kick = func()bool{return true}
+	_, err := fetchEntity(`yo`)
+	assert.Equal(t, 2, invokeCount, ``)
+	assert.Equal(t, `nonsequential update for entity with id "yo"`, err.Error(), ``)
+}
+
 /**
  * helpers
  */

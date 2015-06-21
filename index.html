@@ -417,13 +417,15 @@ func getRequestData(r *http.Request, isForPoll bool) (entityId string, version i
 }
 
 func fetchEntity(entityId string) (entity Entity, err error) <span class="cov8" title="1">{
-        for </span><span class="cov8" title="1">{ // is this insane? ... probably
+        retryCount := 0
+        for </span><span class="cov8" title="1">{
                 entity, err = entityStore.Read(entityId)
                 if err == nil </span><span class="cov8" title="1">{
                         if entity.Kick() </span><span class="cov8" title="1">{
                                 err = entityStore.Update(entityId, entity)
-                                if err != nil &amp;&amp; strings.Contains(err.Error(), `nonsequential update for entity with id "`+entityId+`"`) </span><span class="cov8" title="1">{
+                                if err != nil &amp;&amp; retryCount == 0 &amp;&amp; strings.Contains(err.Error(), `nonsequential update for entity with id "`+entityId+`"`) </span><span class="cov8" title="1">{
                                         err = nil
+                                        retryCount++
                                         continue</span>
                                 }
                         }
